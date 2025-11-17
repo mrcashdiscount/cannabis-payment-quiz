@@ -55,30 +55,50 @@ function generateReviewSummary() {
 
 document.getElementById('quizForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  generateReviewSummary(); // If on step 3
-  if (currentStep !== 3) return;
+  if (currentStep !== 3) {
+    alert('Please complete all steps first.');
+    return;
+  }
+  generateReviewSummary();
+
+  // Show simple loading spinner (add this div to HTML as per Step 3)
+  const loadingSpinner = document.getElementById('loadingSpinner');
+  if (loadingSpinner) loadingSpinner.classList.remove('d-none');
 
   const formData = new FormData(e.target);
-  const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal') || createLoadingModal()); // Optional: Add loading modal in HTML if desired
-  // loadingModal.show();
+  // Convert to URLSearchParams for GAS compatibility
+  const params = new URLSearchParams();
+  for (let [key, value] of formData.entries()) {
+    params.append(key, value);
+  }
+
+  console.log('Submitting...');  // Debug log
 
   try {
     const response = await fetch(GAS_WEB_APP_URL, {
       method: 'POST',
-      body: formData
+      body: params
     });
-    if (response.ok) {
-      bootstrap.Modal.getInstance(document.getElementById('successModal')).show();
+    const result = await response.text();
+    console.log('Response:', result);  // Debug: Should log "SUCCESS"
+
+    // Hide loading
+    if (loadingSpinner) loadingSpinner.classList.add('d-none');
+
+    if (response.ok && result === 'SUCCESS') {
+      const successModal = new bootstrap.Modal(document.getElementById('successModal'));
+      successModal.show();
       document.getElementById('quizForm').reset();
       currentStep = 1;
       updateProgress();
     } else {
-      alert('Oops! Something went wrong. Please try again.');
+      alert(`Submit failed: ${result || 'Unknown error. Check console.'}`);
     }
   } catch (error) {
-    alert('Network error. Please check your connection.');
+    console.error('Fetch error:', error);
+    if (loadingSpinner) loadingSpinner.classList.add('d-none');
+    alert('Network error. Check console for details.');
   }
-  // loadingModal.hide();
 });
 
 // GA Tracking (optional)
