@@ -1,4 +1,4 @@
-const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/YOUR_GAS_ID/exec'; // Replace with your deployed GAS URL
+const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycby2b6VbyeKFRI9JNLPAI75ryjXP2WaT5crwDZCRwEtLBkmdTX05CXy9bADDACRjSSwobA/exec'; // Replace with your deployed GAS URL
 let currentStep = 1;
 
 function updateProgress() {
