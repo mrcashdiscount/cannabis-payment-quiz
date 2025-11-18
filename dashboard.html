@@ -12,7 +12,7 @@
     <div class="row">
       <div class="col-12">
         <h1 class="text-success mb-4">Analyst Dashboard</h1>
-        <p class="text-muted">Manage report requests from the quiz.</p>
+        <p class="text-muted">Manage report requests from the quiz. Review PDFs before sending.</p>
       </div>
     </div>
 
@@ -30,7 +30,7 @@
         <div class="card bg-warning text-white">
           <div class="card-body text-center">
             <h5 id="pendingCount">0</h5>
-            <p>Pending</p>
+            <p>Pending/Generated</p>
           </div>
         </div>
       </div>
@@ -84,6 +84,25 @@
     </div>
   </div>
 
+  <!-- PDF Preview Modal -->
+  <div class="modal fade" id="pdfPreviewModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="pdfTitle">PDF Preview</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <iframe id="pdfIframe" src="" width="100%" height="600px" style="border: none;"></iframe>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="button" class="btn btn-success" id="sendFromPreview" onclick="sendFromModal()">Send to Client</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Success/Error Toast -->
   <div class="toast-container position-fixed bottom-0 end-0 p-3">
     <div id="successToast" class="toast bg-success text-white" role="alert">
@@ -104,8 +123,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-    const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxOIwAAViP9fY49QxUr4m8Wort3jKkQkkTJhAnt3OcFGU08CjkJT-wghzGXq4aqvUjhDA/exec'; // Replace with your actual GAS URL
+    const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxWuqRWbgG5rBsTv_Lysc1gy7dlDUOE0meyHRnwkw3m3JMQKbGk8d2xp9CBya1ZWtGkXA/exec'; // Replace with your actual GAS URL
     const DASHBOARD_PASSWORD = 'analyst123'; // Change this to something secure!
+    let currentRowId = null; // For modal send
     
     // Show password modal on load
     window.onload = () => {
@@ -154,21 +174,22 @@
         
         rows.forEach(row => {
           // Sanitize for display (escape HTML if needed, but simple here)
-          const safeName = row.fullName.replace(/'/g, "&#39;"); // Fix apostrophe display
+          const safeName = row.fullName.replace(/'/g, "&#39;");
           const safeType = row.businessType.replace(/'/g, "&#39;");
           const safeEmail = row.businessEmail || 'N/A';
+          const safePhone = row.cellPhone || '';
           
           tableHtml += `
             <tr>
               <td>${row.timestamp}</td>
               <td>${row.businessName}</td>
-              <td>${safeName}<br><small>${safeEmail}</small><br><small>${row.cellPhone || ''}</small></td>
-              <td>${safeType}<br><small>${row.segmentKey}</small></td>
+              <td>${safeName}<br><small class="text-muted">${safeEmail}</small><br><small class="text-muted">${safePhone}</small></td>
+              <td>${safeType}<br><small class="text-muted">${row.segmentKey}</small></td>
               <td>
                 <span class="badge ${getStatusBadgeClass(row.status)}">${row.status}</span>
               </td>
               <td>
-                ${row.pdfLink ? `<a href="${row.pdfLink}" target="_blank" class="btn btn-sm btn-outline-primary">View PDF</a>` : '<span class="text-muted">No PDF</span>'}
+                ${row.pdfLink ? `<button class="btn btn-sm btn-outline-primary" onclick="previewPDF(${row.id}, '${row.pdfLink}', '${row.businessName}')">Preview PDF</button>` : '<span class="text-muted">No PDF</span>'}
                 <button class="btn btn-sm btn-success ms-1" onclick="sendPDF(${row.id})" ${row.status === 'Sent' ? 'disabled' : ''}>Send to Client</button>
                 <button class="btn btn-sm btn-secondary ms-1" onclick="updateStatus(${row.id}, 'Reviewed')">Mark Reviewed</button>
               </td>
@@ -190,6 +211,20 @@
         case 'Sent': return 'bg-success';
         case 'Reviewed': return 'bg-info';
         default: return 'bg-secondary';
+      }
+    }
+    
+    function previewPDF(rowId, pdfUrl, businessName) {
+      currentRowId = rowId;
+      document.getElementById('pdfTitle').textContent = `Preview: ${businessName}`;
+      document.getElementById('pdfIframe').src = pdfUrl;
+      new bootstrap.Modal(document.getElementById('pdfPreviewModal')).show();
+    }
+    
+    function sendFromModal() {
+      if (currentRowId) {
+        sendPDF(currentRowId);
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('pdfPreviewModal')).hide();
       }
     }
     
