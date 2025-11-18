@@ -84,7 +84,7 @@
     </div>
   </div>
 
-  <!-- Success Toast -->
+  <!-- Success/Error Toast -->
   <div class="toast-container position-fixed bottom-0 end-0 p-3">
     <div id="successToast" class="toast bg-success text-white" role="alert">
       <div class="toast-header">
@@ -93,12 +93,19 @@
       </div>
       <div class="toast-body"></div>
     </div>
+    <div id="errorToast" class="toast bg-danger text-white" role="alert">
+      <div class="toast-header">
+        <strong class="me-auto">Error</strong>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
+      </div>
+      <div class="toast-body"></div>
+    </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-    const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxOIwAAViP9fY49QxUr4m8Wort3jKkQkkTJhAnt3OcFGU08CjkJT-wghzGXq4aqvUjhDA/exec'; // Replace with your GAS URL
-    const DASHBOARD_PASSWORD = 'analyst123'; // Change this! Hardcoded for simplicity
+    const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxOIwAAViP9fY49QxUr4m8Wort3jKkQkkTJhAnt3OcFGU08CjkJT-wghzGXq4aqvUjhDA/exec'; // Replace with your actual GAS URL
+    const DASHBOARD_PASSWORD = 'analyst123'; // Change this to something secure!
     
     // Show password modal on load
     window.onload = () => {
@@ -119,11 +126,12 @@
     async function loadData() {
       try {
         const response = await fetch(GAS_WEB_APP_URL);
+        if (!response.ok) throw new Error('Failed to fetch data');
         const { rows } = await response.json();
         
         // Update stats
         const total = rows.length;
-        const pending = rows.filter(r => r.status === 'Pending').length;
+        const pending = rows.filter(r => r.status === 'Pending' || r.status === 'Generated').length;
         const sent = rows.filter(r => r.status === 'Sent').length;
         const reviewed = rows.filter(r => r.status === 'Reviewed').length;
         
@@ -133,7 +141,7 @@
         document.getElementById('reviewedCount').textContent = reviewed;
         document.getElementById('statsRow').style.display = 'flex';
         
-        // Build table
+        // Build table with proper template literals (backticks)
         let tableHtml = `
           <table class="table table-striped">
             <thead>
@@ -145,17 +153,22 @@
         `;
         
         rows.forEach(row => {
+          // Sanitize for display (escape HTML if needed, but simple here)
+          const safeName = row.fullName.replace(/'/g, "&#39;"); // Fix apostrophe display
+          const safeType = row.businessType.replace(/'/g, "&#39;");
+          const safeEmail = row.businessEmail || 'N/A';
+          
           tableHtml += `
             <tr>
               <td>${row.timestamp}</td>
               <td>${row.businessName}</td>
-              <td>$$ {row.fullName}<br> $${row.businessEmail}<br>${row.cellPhone}</td>
-              <td>$$ {row.businessType}<br> $${row.segmentKey}</td>
+              <td>${safeName}<br><small>${safeEmail}</small><br><small>${row.cellPhone || ''}</small></td>
+              <td>${safeType}<br><small>${row.segmentKey}</small></td>
               <td>
-                <span class="badge $$ {getStatusBadgeClass(row.status)}"> $${row.status}</span>
+                <span class="badge ${getStatusBadgeClass(row.status)}">${row.status}</span>
               </td>
               <td>
-                ${row.pdfLink ? `<a href="${row.pdfLink}" target="_blank" class="btn btn-sm btn-outline-primary">View PDF</a>` : 'No PDF'}
+                ${row.pdfLink ? `<a href="${row.pdfLink}" target="_blank" class="btn btn-sm btn-outline-primary">View PDF</a>` : '<span class="text-muted">No PDF</span>'}
                 <button class="btn btn-sm btn-success ms-1" onclick="sendPDF(${row.id})" ${row.status === 'Sent' ? 'disabled' : ''}>Send to Client</button>
                 <button class="btn btn-sm btn-secondary ms-1" onclick="updateStatus(${row.id}, 'Reviewed')">Mark Reviewed</button>
               </td>
@@ -166,13 +179,14 @@
         tableHtml += '</tbody></table>';
         document.getElementById('tableContainer').innerHTML = tableHtml;
       } catch (error) {
-        document.getElementById('tableContainer').innerHTML = `<p class="text-danger">Error loading data: ${error.message}</p>`;
+        console.error('Load error:', error);
+        document.getElementById('tableContainer').innerHTML = `<p class="text-danger">Error loading data: ${error.message}. Check console.</p>`;
       }
     }
     
     function getStatusBadgeClass(status) {
       switch (status) {
-        case 'Pending': return 'bg-warning';
+        case 'Pending': case 'Generated': return 'bg-warning';
         case 'Sent': return 'bg-success';
         case 'Reviewed': return 'bg-info';
         default: return 'bg-secondary';
@@ -182,26 +196,29 @@
     async function sendPDF(rowId) {
       if (confirm('Send PDF to client?')) {
         try {
+          const params = new URLSearchParams({ action: 'sendPDF', rowId: rowId });
           const response = await fetch(GAS_WEB_APP_URL, {
             method: 'POST',
-            body: new URLSearchParams({ action: 'sendPDF', rowId: rowId })
+            body: params
           });
           const result = await response.text();
-          if (result === 'SUCCESS: PDF Sent') {
-            showToast('PDF sent successfully!');
-            refreshData(); // Reload table
+          console.log('Send PDF response:', result); // Debug
+          if (result.startsWith('SUCCESS')) {
+            showToast('PDF sent successfully!', 'success');
+            setTimeout(refreshData, 1000); // Refresh after delay
           } else {
-            alert('Error: ' + result);
+            showToast(`Error: ${result}`, 'error');
           }
         } catch (error) {
-          alert('Network error: ' + error.message);
+          console.error('Send PDF error:', error);
+          showToast('Network error: ' + error.message, 'error');
         }
       }
     }
     
     async function updateStatus(rowId, status) {
-      // Similar POST to update status (add to GAS if needed)
-      alert(`Marked as ${status} (implement update in GAS for full func.)`);
+      // TODO: Implement POST to GAS for status update (similar to sendPDF)
+      alert(`Marked as ${status} (full update coming soon).`);
       refreshData();
     }
     
@@ -209,9 +226,12 @@
       loadData();
     }
     
-    function showToast(message) {
-      const toast = new bootstrap.Toast(document.getElementById('successToast'));
-      document.querySelector('#successToast .toast-body').textContent = message;
+    function showToast(message, type) {
+      const toastId = type === 'success' ? 'successToast' : 'errorToast';
+      const toastEl = document.getElementById(toastId);
+      const toastBody = toastEl.querySelector('.toast-body');
+      toastBody.textContent = message;
+      const toast = new bootstrap.Toast(toastEl);
       toast.show();
     }
   </script>
